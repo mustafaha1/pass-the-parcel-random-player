@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Stop Music Player</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+        }
+        
+        .player-container {
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            width: 80%;
+            max-width: 400px;
+            text-align: center;
+        }
+        
+        h1 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        
+        .controls {
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+            transform: scale(1.05);
+        }
+        
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        .slider-container {
+            margin: 20px 0;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+        }
+        
+        .song-info {
+            margin: 20px 0;
+            font-size: 1.2rem;
+        }
+        
+        .status {
+            font-weight: bold;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        .playing {
+            background-color: rgba(76, 175, 80, 0.3);
+        }
+        
+        .paused {
+            background-color: rgba(255, 193, 7, 0.3);
+        }
+        
+        select {
+            padding: 8px;
+            border-radius: 5px;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="player-container">
+        <h1>Random Stop Player</h1>
+        
+        <div class="song-selector">
+            <select id="songSelect">
+                <option value="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3">SoundHelix Song 1</option>
+                <option value="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3">SoundHelix Song 2</option>
+                <option value="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3">SoundHelix Song 3</option>
+            </select>
+        </div>
+        
+        <div class="song-info">
+            Now Playing: <span id="currentSong">None</span>
+        </div>
+        
+        <div class="status" id="status">Ready</div>
+        
+        <div class="controls">
+            <button id="playBtn">Play</button>
+            <button id="stopBtn" disabled>Stop</button>
+        </div>
+        
+        <div class="slider-container">
+            <label for="randomness">Random Stop Frequency:</label>
+            <input type="range" id="randomness" min="5" max="60" value="15">
+            <span id="randomnessValue">15 seconds</span>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const audio = new Audio();
+            const playBtn = document.getElementById('playBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const songSelect = document.getElementById('songSelect');
+            const currentSongDisplay = document.getElementById('currentSong');
+            const statusDisplay = document.getElementById('status');
+            const randomnessSlider = document.getElementById('randomness');
+            const randomnessValue = document.getElementById('randomnessValue');
+            
+            let stopTimer;
+            let resumeTimer;
+            let isRandomStoppingEnabled = false;
+            
+            // Update slider value display
+            randomnessSlider.addEventListener('input', function() {
+                randomnessValue.textContent = `${this.value} seconds`;
+            });
+            
+            // Play button click handler
+            playBtn.addEventListener('click', function() {
+                if (audio.paused) {
+                    const songUrl = songSelect.value;
+                    const songName = songSelect.options[songSelect.selectedIndex].text;
+                    
+                    audio.src = songUrl;
+                    currentSongDisplay.textContent = songName;
+                    
+                    audio.play()
+                        .then(() => {
+                            playBtn.textContent = 'Pause';
+                            stopBtn.disabled = false;
+                            statusDisplay.textContent = 'Playing';
+                            statusDisplay.className = 'status playing';
+                            
+                            // Start random stopping
+                            isRandomStoppingEnabled = true;
+                            scheduleRandomStop();
+                        })
+                        .catch(error => {
+                            console.error('Playback failed:', error);
+                            statusDisplay.textContent = 'Playback error: ' + error.message;
+                            statusDisplay.className = 'status error';
+                        });
+                } else {
+                    // If already playing, pause and clear timers
+                    audio.pause();
+                    playBtn.textContent = 'Play';
+                    statusDisplay.textContent = 'Paused manually';
+                    statusDisplay.className = 'status paused';
+                    
+                    // Clear any pending stops/resumes
+                    clearTimeout(stopTimer);
+                    clearTimeout(resumeTimer);
+                    isRandomStoppingEnabled = false;
+                }
+            });
+            
+            // Stop button click handler
+            stopBtn.addEventListener('click', function() {
+                audio.pause();
+                audio.currentTime = 0;
+                playBtn.textContent = 'Play';
+                stopBtn.disabled = true;
+                statusDisplay.textContent = 'Stopped';
+                statusDisplay.className = 'status';
+                
+                // Clear any pending stops/resumes
+                clearTimeout(stopTimer);
+                clearTimeout(resumeTimer);
+                isRandomStoppingEnabled = false;
+            });
+            
+            // Schedule a random stop
+            function scheduleRandomStop() {
+                if (!isRandomStoppingEnabled) return;
+                
+                const minStopTime = 5; // seconds
+                const maxStopTime = parseInt(randomnessSlider.value);
+                
+                // Random time between minStopTime and maxStopTime
+                const stopDelay = Math.random() * (maxStopTime - minStopTime) + minStopTime;
+                
+                stopTimer = setTimeout(() => {
+                    if (!audio.paused && isRandomStoppingEnabled) {
+                        audio.pause();
+                        statusDisplay.textContent = 'Paused randomly';
+                        statusDisplay.className = 'status paused';
+                        
+                        // Schedule resume after random pause (1-5 seconds)
+                        const pauseDuration = Math.random() * 4 + 1;
+                        resumeTimer = setTimeout(() => {
+                            if (isRandomStoppingEnabled) {
+                                audio.play()
+                                    .then(() => {
+                                        statusDisplay.textContent = 'Playing';
+                                        statusDisplay.className = 'status playing';
+                                        scheduleRandomStop();
+                                    })
+                                    .catch(error => {
+                                        console.error('Resume failed:', error);
+                                        statusDisplay.textContent = 'Resume error: ' + error.message;
+                                        statusDisplay.className = 'status error';
+                                    });
+                            }
+                        }, pauseDuration * 1000);
+                    } else {
+                        scheduleRandomStop();
+                    }
+                }, stopDelay * 1000);
+            }
+            
+            // Handle when song ends naturally
+            audio.addEventListener('ended', function() {
+                playBtn.textContent = 'Play';
+                stopBtn.disabled = true;
+                statusDisplay.textContent = 'Song ended';
+                statusDisplay.className = 'status';
+                
+                // Clear any pending stops/resumes
+                clearTimeout(stopTimer);
+                clearTimeout(resumeTimer);
+                isRandomStoppingEnabled = false;
+            });
+        });
+    </script>
+</body>
+</html>
